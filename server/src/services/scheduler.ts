@@ -78,7 +78,7 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function buildSlotPool(fields: Field[], season: SeasonConfig): Slot[] {
+function buildSlotPool(fields: Field[], season: SeasonConfig, blackoutDates: Set<string>): Slot[] {
   const slots: Slot[] = [];
   const start = new Date(season.start_date + "T00:00:00");
   const end = new Date(season.end_date + "T00:00:00");
@@ -88,6 +88,7 @@ function buildSlotPool(fields: Field[], season: SeasonConfig): Slot[] {
     const d = addDays(season.start_date, i);
     const dow = d.getDay();
     const dateStr = formatDate(d);
+    if (blackoutDates.has(dateStr)) continue;
 
     for (const field of fields) {
       const duration = field.default_duration_minutes ?? season.default_game_duration_minutes;
@@ -185,7 +186,8 @@ function buildMatchupQueue(teams: Team[], gamesPerMatchup: number): Matchup[] {
 export function generateSchedule(
   teams: Team[],
   fields: Field[],
-  season: SeasonConfig
+  season: SeasonConfig,
+  blackoutDates: string[] = []
 ): ScheduleResult {
   if (!season.start_date || !season.end_date) {
     throw new Error("Season start_date and end_date must be configured");
@@ -194,7 +196,7 @@ export function generateSchedule(
     throw new Error("At least one field with availability windows is required");
   }
 
-  const slots = buildSlotPool(fields, season);
+  const slots = buildSlotPool(fields, season, new Set(blackoutDates));
   const matchups = buildMatchupQueue(teams, season.games_per_matchup || 1);
   const teamBusyDates = new Map<number, Set<string>>();
 

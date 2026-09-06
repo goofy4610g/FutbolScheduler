@@ -95,9 +95,35 @@ export interface Game {
   field_id: number | null;
   home_team_id: number;
   away_team_id: number;
+  home_score: number | null;
+  away_score: number | null;
   home_team_name: string;
   away_team_name: string;
   field_name: string | null;
+}
+
+export interface BlackoutDate {
+  id: number;
+  date: string;
+  reason: string | null;
+}
+
+export interface StandingsRow {
+  team_id: number;
+  team_name: string;
+  division: string | null;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals_for: number;
+  goals_against: number;
+  points: number;
+}
+
+export interface StandingsDivision {
+  division: string;
+  teams: StandingsRow[];
 }
 
 export interface GenerateScheduleResult {

@@ -91,7 +91,15 @@ db.exec(`
     end_time TEXT NOT NULL,
     field_id INTEGER REFERENCES fields(id) ON DELETE SET NULL,
     home_team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    away_team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE
+    away_team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    home_score INTEGER,
+    away_score INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS blackout_dates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL UNIQUE,
+    reason TEXT
   );
 `);
 

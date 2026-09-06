@@ -357,3 +357,21 @@ th {
   color: #777;
   font-size: 0.85rem;
 }
+
+@media print {
+  .app-header,
+  .app-nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-main {
+    padding: 0;
+    max-width: none;
+  }
+
+  .card {
+    border: none;
+    padding: 0;
+  }
+}

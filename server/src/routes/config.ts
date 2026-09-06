@@ -94,6 +94,29 @@ configRouter.delete("/availability/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Blackout dates ----
+configRouter.get("/blackouts", (_req, res) => {
+  res.json(db.prepare(`SELECT * FROM blackout_dates ORDER BY date`).all());
+});
+
+configRouter.post("/blackouts", (req, res) => {
+  const { date, reason } = req.body ?? {};
+  if (!date) return res.status(400).json({ error: "date is required" });
+  try {
+    const info = db
+      .prepare(`INSERT INTO blackout_dates (date, reason) VALUES (?, ?)`)
+      .run(date, reason ?? null);
+    res.status(201).json({ id: info.lastInsertRowid });
+  } catch {
+    res.status(400).json({ error: `${date} is already marked as a blackout date` });
+  }
+});
+
+configRouter.delete("/blackouts/:id", (req, res) => {
+  db.prepare(`DELETE FROM blackout_dates WHERE id = ?`).run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ---- Season config ----
 configRouter.get("/season", (_req, res) => {
   res.json(db.prepare(`SELECT * FROM season_config WHERE id = 1`).get());

@@ -1,28 +1,33 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import type { Field, SeasonConfig } from "../types";
+import type { BlackoutDate, Field, SeasonConfig } from "../types";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const STEPS = ["Fields & Game Times", "Season Settings", "Review"];
+const STEPS = ["Fields & Game Times", "Season Settings", "Blackout Dates", "Review"];
 
 export function Configuration() {
   const [step, setStep] = useState(0);
   const [fields, setFields] = useState<Field[]>([]);
   const [season, setSeason] = useState<SeasonConfig | null>(null);
+  const [blackouts, setBlackouts] = useState<BlackoutDate[]>([]);
   const [loading, setLoading] = useState(true);
 
   const reloadFields = async () => setFields(await api.get<Field[]>("/api/config/fields"));
+  const reloadBlackouts = async () => setBlackouts(await api.get<BlackoutDate[]>("/api/config/blackouts"));
 
   useEffect(() => {
-    Promise.all([api.get<Field[]>("/api/config/fields"), api.get<SeasonConfig>("/api/config/season")]).then(
-      ([f, s]) => {
-        setFields(f);
-        setSeason(s);
-        setLoading(false);
-      }
-    );
+    Promise.all([
+      api.get<Field[]>("/api/config/fields"),
+      api.get<SeasonConfig>("/api/config/season"),
+      api.get<BlackoutDate[]>("/api/config/blackouts"),
+    ]).then(([f, s, b]) => {
+      setFields(f);
+      setSeason(s);
+      setBlackouts(b);
+      setLoading(false);
+    });
   }, []);
 
   if (loading || !season) return <p>Loading configuration...</p>;
@@ -40,7 +45,8 @@ export function Configuration() {
 
       {step === 0 && <FieldsStep fields={fields} onChange={reloadFields} />}
       {step === 1 && <SeasonStep season={season} onSave={setSeason} />}
-      {step === 2 && <ReviewStep fields={fields} season={season} />}
+      {step === 2 && <BlackoutStep blackouts={blackouts} onChange={reloadBlackouts} />}
+      {step === 3 && <ReviewStep fields={fields} season={season} blackouts={blackouts} />}
 
       <div className="row" style={{ marginTop: "1.5rem" }}>
         <button className="btn secondary" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
@@ -303,7 +309,94 @@ function SeasonStep({ season, onSave }: { season: SeasonConfig; onSave: (s: Seas
   );
 }
 
-function ReviewStep({ fields, season }: { fields: Field[]; season: SeasonConfig }) {
+function BlackoutStep({ blackouts, onChange }: { blackouts: BlackoutDate[]; onChange: () => void }) {
+  const [date, setDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function addBlackout(e: FormEvent) {
+    e.preventDefault();
+    if (!date) return;
+    setError(null);
+    try {
+      await api.post("/api/config/blackouts", { date, reason: reason || null });
+      setDate("");
+      setReason("");
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add blackout date");
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>Blackout dates</h3>
+      <p className="muted">
+        Dates the scheduler should skip entirely (holidays, tournaments, facility closures).
+      </p>
+      <form onSubmit={addBlackout} className="row">
+        <div className="field">
+          <label>Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </div>
+        <div className="field">
+          <label>Reason (optional)</label>
+          <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Holiday weekend" />
+        </div>
+        <button className="btn secondary" type="submit">
+          Add blackout date
+        </button>
+      </form>
+      {error && <div className="banner error">{error}</div>}
+
+      <table style={{ marginTop: "1rem" }}>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Reason</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {blackouts.length === 0 && (
+            <tr>
+              <td colSpan={3} className="muted">
+                No blackout dates yet.
+              </td>
+            </tr>
+          )}
+          {blackouts.map((b) => (
+            <tr key={b.id}>
+              <td>{b.date}</td>
+              <td>{b.reason}</td>
+              <td>
+                <button
+                  className="btn secondary small"
+                  onClick={async () => {
+                    await api.delete(`/api/config/blackouts/${b.id}`);
+                    onChange();
+                  }}
+                >
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReviewStep({
+  fields,
+  season,
+  blackouts,
+}: {
+  fields: Field[];
+  season: SeasonConfig;
+  blackouts: BlackoutDate[];
+}) {
   const totalWindows = fields.reduce((sum, f) => sum + f.availability.length, 0);
   const ready = fields.length > 0 && totalWindows > 0 && Boolean(season.start_date && season.end_date);
 
@@ -317,6 +410,9 @@ function ReviewStep({ fields, season }: { fields: Field[]; season: SeasonConfig 
       <p>
         Season: <strong>{season.season_name || "Untitled"}</strong> from {season.start_date || "?"} to{" "}
         {season.end_date || "?"}, each matchup played {season.games_per_matchup}x.
+      </p>
+      <p>
+        <strong>{blackouts.length}</strong> blackout date(s) will be skipped when generating the schedule.
       </p>
       {ready ? (
         <div className="banner success">
