@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { useTheme } from "../context/ThemeContext";
+import type { ThemeConfig } from "../types";
 
 const FONT_OPTIONS = [
   { label: "System default", value: "system-ui, sans-serif" },
@@ -11,11 +12,15 @@ const FONT_OPTIONS = [
 
 export function Branding() {
   const { theme, refresh } = useTheme();
-  const [form, setForm] = useState(theme);
+  const [form, setForm] = useState<ThemeConfig | null>(theme);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (theme && !form) setForm(theme);
+  }, [theme, form]);
 
   if (!form) return <p>Loading branding settings...</p>;
 
