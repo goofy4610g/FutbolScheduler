@@ -60,7 +60,8 @@ db.exec(`
     end_date TEXT,
     games_per_matchup INTEGER DEFAULT 1,
     default_game_duration_minutes INTEGER DEFAULT 60,
-    break_between_games_minutes INTEGER DEFAULT 15
+    break_between_games_minutes INTEGER DEFAULT 15,
+    game_days_of_week TEXT
   );
 
   CREATE TABLE IF NOT EXISTS theme_config (
@@ -101,7 +102,17 @@ db.exec(`
     date TEXT NOT NULL UNIQUE,
     reason TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS game_days (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL UNIQUE
+  );
 `);
+
+const seasonColumns = db.prepare(`PRAGMA table_info(season_config)`).all() as Array<{ name: string }>;
+if (!seasonColumns.some((c) => c.name === "game_days_of_week")) {
+  db.exec(`ALTER TABLE season_config ADD COLUMN game_days_of_week TEXT`);
+}
 
 db.prepare(
   `INSERT OR IGNORE INTO season_config (id) VALUES (1)`

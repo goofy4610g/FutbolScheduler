@@ -49,6 +49,12 @@ export interface SeasonConfig {
   games_per_matchup: number;
   default_game_duration_minutes: number;
   break_between_games_minutes: number;
+  game_days_of_week: number[];
+}
+
+export interface GameDay {
+  id: number;
+  date: string;
 }
 
 export interface ThemeConfig {

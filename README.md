@@ -27,11 +27,14 @@ run — no setup required.
 1. **Data Upload** — upload a CSV/TSV/XLSX file of teams, then players and coaches (which link to
    teams by name).
 2. **Configuration** — add fields, define the days/times each field is available and how long
-   games run, and set season start/end dates plus how many times each team plays every other team.
+   games run, set season start/end dates plus how many times each team plays every other team,
+   define game days (a recurring weekday restriction like "Saturdays and Sundays only", specific
+   calendar dates that replace the season date range entirely, or both), and mark blackout dates.
 3. **Branding** — set league name, header text, colors, font, and logo; changes apply across the
    whole app immediately.
 4. **Schedule** — generate a round-robin schedule. The scheduler avoids double-booking a team or a
-   field/time slot, and reports any matchups it couldn't fit so you can add more field time.
+   field/time slot, honors game days and blackout dates, and reports any matchups it couldn't fit
+   so you can add more field time.
 
 ## Project structure
 

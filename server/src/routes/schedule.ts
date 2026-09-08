@@ -57,22 +57,30 @@ scheduleRouter.post("/generate", (_req, res) => {
       ...f,
       availability: availability.filter((a) => a.field_id === f.id),
     }));
-    const season = db.prepare(`SELECT * FROM season_config WHERE id = 1`).get() as {
+    const seasonRow = db.prepare(`SELECT * FROM season_config WHERE id = 1`).get() as {
       start_date: string;
       end_date: string;
       games_per_matchup: number;
       default_game_duration_minutes: number;
       break_between_games_minutes: number;
+      game_days_of_week: string | null;
+    };
+    const season = {
+      ...seasonRow,
+      game_days_of_week: seasonRow.game_days_of_week ? (JSON.parse(seasonRow.game_days_of_week) as number[]) : [],
     };
     const blackoutDates = (db.prepare(`SELECT date FROM blackout_dates`).all() as Array<{ date: string }>).map(
       (b) => b.date
+    );
+    const gameDays = (db.prepare(`SELECT date FROM game_days`).all() as Array<{ date: string }>).map(
+      (g) => g.date
     );
 
     if (teams.length < 2) {
       return res.status(400).json({ error: "At least two teams are required to generate a schedule" });
     }
 
-    const result = generateSchedule(teams, fields, season, blackoutDates);
+    const result = generateSchedule(teams, fields, season, blackoutDates, gameDays);
 
     const batchId = db.transaction(() => {
       const batch = db

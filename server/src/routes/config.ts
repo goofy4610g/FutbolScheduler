@@ -117,9 +117,38 @@ configRouter.delete("/blackouts/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Specific game days (explicit date whitelist) ----
+configRouter.get("/game-days", (_req, res) => {
+  res.json(db.prepare(`SELECT * FROM game_days ORDER BY date`).all());
+});
+
+configRouter.post("/game-days", (req, res) => {
+  const { date } = req.body ?? {};
+  if (!date) return res.status(400).json({ error: "date is required" });
+  try {
+    const info = db.prepare(`INSERT INTO game_days (date) VALUES (?)`).run(date);
+    res.status(201).json({ id: info.lastInsertRowid });
+  } catch {
+    res.status(400).json({ error: `${date} is already a game day` });
+  }
+});
+
+configRouter.delete("/game-days/:id", (req, res) => {
+  db.prepare(`DELETE FROM game_days WHERE id = ?`).run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ---- Season config ----
+function serializeSeason(row: Record<string, unknown>) {
+  return {
+    ...row,
+    game_days_of_week: row.game_days_of_week ? JSON.parse(row.game_days_of_week as string) : [],
+  };
+}
+
 configRouter.get("/season", (_req, res) => {
-  res.json(db.prepare(`SELECT * FROM season_config WHERE id = 1`).get());
+  const row = db.prepare(`SELECT * FROM season_config WHERE id = 1`).get() as Record<string, unknown>;
+  res.json(serializeSeason(row));
 });
 
 configRouter.put("/season", (req, res) => {
@@ -130,11 +159,13 @@ configRouter.put("/season", (req, res) => {
     games_per_matchup,
     default_game_duration_minutes,
     break_between_games_minutes,
+    game_days_of_week,
   } = req.body ?? {};
   db.prepare(
     `UPDATE season_config SET
       season_name = ?, start_date = ?, end_date = ?,
-      games_per_matchup = ?, default_game_duration_minutes = ?, break_between_games_minutes = ?
+      games_per_matchup = ?, default_game_duration_minutes = ?, break_between_games_minutes = ?,
+      game_days_of_week = ?
      WHERE id = 1`
   ).run(
     season_name ?? null,
@@ -142,9 +173,13 @@ configRouter.put("/season", (req, res) => {
     end_date ?? null,
     games_per_matchup ?? 1,
     default_game_duration_minutes ?? 60,
-    break_between_games_minutes ?? 15
+    break_between_games_minutes ?? 15,
+    Array.isArray(game_days_of_week) && game_days_of_week.length > 0
+      ? JSON.stringify(game_days_of_week)
+      : null
   );
-  res.json({ ok: true });
+  const row = db.prepare(`SELECT * FROM season_config WHERE id = 1`).get() as Record<string, unknown>;
+  res.json(serializeSeason(row));
 });
 
 // ---- Theme config ----

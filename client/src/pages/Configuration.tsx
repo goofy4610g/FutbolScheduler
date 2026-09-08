@@ -1,30 +1,34 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import type { BlackoutDate, Field, SeasonConfig } from "../types";
+import type { BlackoutDate, Field, GameDay, SeasonConfig } from "../types";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const STEPS = ["Fields & Game Times", "Season Settings", "Blackout Dates", "Review"];
+const STEPS = ["Fields & Game Times", "Season Settings", "Game Days", "Blackout Dates", "Review"];
 
 export function Configuration() {
   const [step, setStep] = useState(0);
   const [fields, setFields] = useState<Field[]>([]);
   const [season, setSeason] = useState<SeasonConfig | null>(null);
+  const [gameDays, setGameDays] = useState<GameDay[]>([]);
   const [blackouts, setBlackouts] = useState<BlackoutDate[]>([]);
   const [loading, setLoading] = useState(true);
 
   const reloadFields = async () => setFields(await api.get<Field[]>("/api/config/fields"));
+  const reloadGameDays = async () => setGameDays(await api.get<GameDay[]>("/api/config/game-days"));
   const reloadBlackouts = async () => setBlackouts(await api.get<BlackoutDate[]>("/api/config/blackouts"));
 
   useEffect(() => {
     Promise.all([
       api.get<Field[]>("/api/config/fields"),
       api.get<SeasonConfig>("/api/config/season"),
+      api.get<GameDay[]>("/api/config/game-days"),
       api.get<BlackoutDate[]>("/api/config/blackouts"),
-    ]).then(([f, s, b]) => {
+    ]).then(([f, s, g, b]) => {
       setFields(f);
       setSeason(s);
+      setGameDays(g);
       setBlackouts(b);
       setLoading(false);
     });
@@ -45,8 +49,9 @@ export function Configuration() {
 
       {step === 0 && <FieldsStep fields={fields} onChange={reloadFields} />}
       {step === 1 && <SeasonStep season={season} onSave={setSeason} />}
-      {step === 2 && <BlackoutStep blackouts={blackouts} onChange={reloadBlackouts} />}
-      {step === 3 && <ReviewStep fields={fields} season={season} blackouts={blackouts} />}
+      {step === 2 && <GameDaysStep season={season} onSaveSeason={setSeason} gameDays={gameDays} onChangeGameDays={reloadGameDays} />}
+      {step === 3 && <BlackoutStep blackouts={blackouts} onChange={reloadBlackouts} />}
+      {step === 4 && <ReviewStep fields={fields} season={season} gameDays={gameDays} blackouts={blackouts} />}
 
       <div className="row" style={{ marginTop: "1.5rem" }}>
         <button className="btn secondary" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
@@ -258,7 +263,6 @@ function SeasonStep({ season, onSave }: { season: SeasonConfig; onSave: (s: Seas
               type="date"
               value={form.start_date ?? ""}
               onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-              required
             />
           </div>
           <div className="field">
@@ -267,10 +271,12 @@ function SeasonStep({ season, onSave }: { season: SeasonConfig; onSave: (s: Seas
               type="date"
               value={form.end_date ?? ""}
               onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-              required
             />
           </div>
         </div>
+        <p className="muted">
+          Leave dates blank if you'll define specific game days instead, on the next step.
+        </p>
         <div className="row">
           <div className="field">
             <label>Times each team plays every other team</label>
@@ -305,6 +311,143 @@ function SeasonStep({ season, onSave }: { season: SeasonConfig; onSave: (s: Seas
         </button>
         {saved && <span className="banner success" style={{ marginLeft: "1rem", display: "inline-block" }}>Saved</span>}
       </form>
+    </div>
+  );
+}
+
+function GameDaysStep({
+  season,
+  onSaveSeason,
+  gameDays,
+  onChangeGameDays,
+}: {
+  season: SeasonConfig;
+  onSaveSeason: (s: SeasonConfig) => void;
+  gameDays: GameDay[];
+  onChangeGameDays: () => void;
+}) {
+  const [selectedDays, setSelectedDays] = useState<number[]>(season.game_days_of_week);
+  const [savedWeekdays, setSavedWeekdays] = useState(false);
+  const [date, setDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleDay(day: number) {
+    setSelectedDays((current) =>
+      current.includes(day) ? current.filter((d) => d !== day) : [...current, day].sort()
+    );
+  }
+
+  async function saveWeekdays() {
+    const updated = { ...season, game_days_of_week: selectedDays };
+    const saved = await api.put<SeasonConfig>("/api/config/season", updated);
+    onSaveSeason(saved);
+    setSavedWeekdays(true);
+    setTimeout(() => setSavedWeekdays(false), 2000);
+  }
+
+  async function addGameDay(e: FormEvent) {
+    e.preventDefault();
+    if (!date) return;
+    setError(null);
+    try {
+      await api.post("/api/config/game-days", { date });
+      setDate("");
+      onChangeGameDays();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add game day");
+    }
+  }
+
+  return (
+    <div>
+      <div className="card">
+        <h3>Recurring game days</h3>
+        <p className="muted">
+          Restrict the whole season to certain days of the week (e.g. only Saturday and Sunday), on top
+          of each field's own available time windows. Leave none selected to allow any day a field is
+          available.
+        </p>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          {DAYS.map((d, i) => (
+            <label
+              key={d}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                fontWeight: 400,
+                flex: "0 0 auto",
+                minWidth: "auto",
+              }}
+            >
+              <input type="checkbox" checked={selectedDays.includes(i)} onChange={() => toggleDay(i)} />
+              {d}
+            </label>
+          ))}
+        </div>
+        <button className="btn" style={{ marginTop: "1rem" }} onClick={saveWeekdays}>
+          Save recurring game days
+        </button>
+        {savedWeekdays && (
+          <span className="banner success" style={{ marginLeft: "1rem", display: "inline-block" }}>
+            Saved
+          </span>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Specific game days</h3>
+        <p className="muted">
+          Add exact dates games are allowed on. When any specific game days are set, the scheduler uses
+          only these dates instead of every matching weekday in the season range &mdash; useful for bye
+          weeks or an irregular calendar.
+        </p>
+        <form onSubmit={addGameDay} className="row">
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          </div>
+          <button className="btn secondary" type="submit">
+            Add game day
+          </button>
+        </form>
+        {error && <div className="banner error">{error}</div>}
+
+        <table style={{ marginTop: "1rem" }}>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {gameDays.length === 0 && (
+              <tr>
+                <td colSpan={2} className="muted">
+                  No specific game days added &mdash; the season date range and recurring days above will
+                  be used instead.
+                </td>
+              </tr>
+            )}
+            {gameDays.map((g) => (
+              <tr key={g.id}>
+                <td>{g.date}</td>
+                <td>
+                  <button
+                    className="btn secondary small"
+                    onClick={async () => {
+                      await api.delete(`/api/config/game-days/${g.id}`);
+                      onChangeGameDays();
+                    }}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -391,14 +534,17 @@ function BlackoutStep({ blackouts, onChange }: { blackouts: BlackoutDate[]; onCh
 function ReviewStep({
   fields,
   season,
+  gameDays,
   blackouts,
 }: {
   fields: Field[];
   season: SeasonConfig;
+  gameDays: GameDay[];
   blackouts: BlackoutDate[];
 }) {
   const totalWindows = fields.reduce((sum, f) => sum + f.availability.length, 0);
-  const ready = fields.length > 0 && totalWindows > 0 && Boolean(season.start_date && season.end_date);
+  const hasDateRange = Boolean(season.start_date && season.end_date) || gameDays.length > 0;
+  const ready = fields.length > 0 && totalWindows > 0 && hasDateRange;
 
   return (
     <div className="card">
@@ -412,6 +558,21 @@ function ReviewStep({
         {season.end_date || "?"}, each matchup played {season.games_per_matchup}x.
       </p>
       <p>
+        {gameDays.length > 0 ? (
+          <>
+            <strong>{gameDays.length}</strong> specific game day(s) will be used instead of the season date
+            range.
+          </>
+        ) : season.game_days_of_week.length > 0 ? (
+          <>
+            Games are restricted to{" "}
+            <strong>{season.game_days_of_week.map((d) => DAYS[d]).join(", ")}</strong>.
+          </>
+        ) : (
+          <>No recurring game day restriction &mdash; any day a field is available may be used.</>
+        )}
+      </p>
+      <p>
         <strong>{blackouts.length}</strong> blackout date(s) will be skipped when generating the schedule.
       </p>
       {ready ? (
@@ -421,8 +582,8 @@ function ReviewStep({
         </div>
       ) : (
         <div className="banner info">
-          Add at least one field with a time window, and set season start/end dates, to enable schedule
-          generation.
+          Add at least one field with a time window, and either set season start/end dates or add specific
+          game days, to enable schedule generation.
         </div>
       )}
     </div>
